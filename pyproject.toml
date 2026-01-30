@@ -1,0 +1,17 @@
+[project]
+name = "strata"
+version = "0.1.0"
+description = "CPU-only inference engine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "safetensors>=0.4.0",
+    "huggingface-hub>=0.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
