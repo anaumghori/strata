@@ -9,6 +9,8 @@ dependencies = [
     "transformers>=4.40.0",
     "safetensors>=0.4.0",
     "huggingface-hub>=0.20.0",
+    "xxhash>=3.0.0",
+    "jinja2>=3.0.0",
 ]
 
 [project.optional-dependencies]
