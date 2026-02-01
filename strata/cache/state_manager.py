@@ -24,6 +24,7 @@ class StateManager:
         conv_kernel_size: int,
         conv_dim: int,
         dtype: torch.dtype = torch.float32,
+        enable_prefix_caching: bool = True,
     ) -> None:
         """Initialize state manager with all cache components.
 
@@ -37,10 +38,12 @@ class StateManager:
         :param conv_kernel_size: ShortConv kernel size
         :param conv_dim: ShortConv hidden dimension
         :param dtype: Data type for cache tensors
+        :param enable_prefix_caching: Enable hash-based prefix caching
         """
         self.block_size = block_size
         self.max_sequences = max_sequences
         self.dtype = dtype
+        self.enable_prefix_caching = enable_prefix_caching
 
         self.kv_cache = KVCache(
             num_layers=num_attention_layers,
@@ -62,24 +65,41 @@ class StateManager:
         self.block_manager = BlockManager(
             num_blocks=num_blocks,
             block_size=block_size,
+            enable_prefix_caching=enable_prefix_caching,
         )
 
         self.seq_to_slot: dict[int, int] = {}
         self.seq_to_blocks: dict[int, list[int]] = {}
+        self.seq_to_cached_tokens: dict[int, int] = {}
 
 
-    def allocate_sequence(self, seq_id: int, initial_length: int) -> bool:
+    def allocate_sequence(
+        self,
+        seq_id: int,
+        initial_length: int,
+        prompt_tokens: list[int] | None = None,
+    ) -> bool:
         """Allocate cache resources for a new sequence.
 
         :param seq_id: Unique sequence identifier
         :param initial_length: Initial prompt length
+        :param prompt_tokens: Optional prompt tokens for prefix caching
         :returns: True if allocation succeeded
         """
         num_blocks_needed = self.block_manager.get_num_blocks_for_tokens(initial_length)
         if not self.block_manager.can_allocate(num_blocks_needed):
             return False
-        block_ids = self.block_manager.allocate_blocks(num_blocks_needed)
+
+        if self.enable_prefix_caching and prompt_tokens is not None:
+            block_ids, num_cached = self.block_manager.allocate_with_prefix_cache(
+                prompt_tokens
+            )
+        else:
+            block_ids = self.block_manager.allocate_blocks(num_blocks_needed)
+            num_cached = 0
+
         self.seq_to_blocks[seq_id] = block_ids
+        self.seq_to_cached_tokens[seq_id] = num_cached
         slot = self.conv_state.allocate_slot(seq_id)
         self.seq_to_slot[seq_id] = slot
         return True
@@ -100,21 +120,19 @@ class StateManager:
 
 
     def can_allocate(self, num_tokens: int) -> bool:
-        """Check if resources can be allocated for given token count.
-
+        """
         :param num_tokens: Number of tokens to check
-        :returns: True if allocation is possible
+        :returns: True if resources can be allocated for given token count.
         """
         num_blocks = self.block_manager.get_num_blocks_for_tokens(num_tokens)
         return self.block_manager.can_allocate(num_blocks)
 
 
     def can_append_token(self, seq_id: int, current_length: int) -> bool:
-        """Check if a token can be appended to the sequence.
-
+        """
         :param seq_id: Sequence identifier
         :param current_length: Current sequence length
-        :returns: True if append is possible
+        :returns: True if a token can be appended to the sequence.
         """
         if seq_id not in self.seq_to_blocks:
             return False
@@ -134,17 +152,23 @@ class StateManager:
 
 
     def get_block_table(self, seq_id: int) -> list[int]:
-        """Get the block table for a sequence.
-
+        """
         :param seq_id: Sequence identifier
-        :returns: List of block IDs
+        :returns: List of block IDs for a sequence.
         """
         return self.seq_to_blocks.get(seq_id, [])
 
 
-    def get_conv_slot(self, seq_id: int) -> int:
-        """Get the conv state slot for a sequence.
+    def get_num_cached_tokens(self, seq_id: int) -> int:
+        """
+        :param seq_id: Sequence identifier
+        :returns: Number of tokens that hit prefix cache
+        """
+        return self.seq_to_cached_tokens.get(seq_id, 0)
 
+
+    def get_conv_slot(self, seq_id: int) -> int:
+        """
         :param seq_id: Sequence identifier
         :returns: Slot index
         """
