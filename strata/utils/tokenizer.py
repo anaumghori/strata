@@ -1,10 +1,12 @@
 from transformers import AutoTokenizer
 
+from strata.utils.chat_template import ChatMessage, apply_chat_template
+
 
 class Tokenizer:
     """
-    Wrapper for HuggingFace tokenizer. Provides encoding and decoding methods 
-    optimized for inference pipeline integration.
+    Wrapper for HuggingFace tokenizer. Provides encoding, decoding, and chat 
+    template methods optimized for inference pipeline integration.
     """
 
     def __init__(self, model_path: str) -> None:
@@ -71,3 +73,32 @@ class Tokenizer:
             self.decode(token_ids, skip_special_tokens=skip_special_tokens)
             for token_ids in token_ids_list
         ]
+
+
+    def apply_chat_template(
+        self,
+        messages: list[ChatMessage],
+        tokenize: bool = False,
+        add_generation_prompt: bool = True,
+        chat_template: str | None = None,
+    ) -> str | list[int]:
+        """
+        :param messages: List of chat messages with role and content
+        :param tokenize: If True, return token IDs instead of string
+        :param add_generation_prompt: Whether to add assistant prompt
+        :param chat_template: Optional explicit template override
+        :returns: Formatted prompt string or token IDs
+        """
+        return apply_chat_template(
+            self._tokenizer,
+            messages,
+            tokenize=tokenize,
+            add_generation_prompt=add_generation_prompt,
+            chat_template=chat_template,
+        )
+
+
+    @property
+    def has_chat_template(self) -> bool:
+        """Returns: True if tokenizer has a built-in chat template"""
+        return hasattr(self._tokenizer, 'chat_template') and self._tokenizer.chat_template is not None
