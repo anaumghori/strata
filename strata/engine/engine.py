@@ -18,7 +18,7 @@ class LLMEngine:
 
     def __init__(self, config: StrataConfig) -> None:
         self.config = config
-        self.dtype = get_dtype(config.dtype)
+        self.dtype = get_dtype(config.dtype, config.model_path)
         self._setup_threads()
         self.tokenizer = Tokenizer(config.model_path)
         self.eos_token_id = self.tokenizer.eos_token_id

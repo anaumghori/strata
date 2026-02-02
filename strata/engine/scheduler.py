@@ -46,8 +46,8 @@ class Scheduler:
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
         self.consecutive_prefill_chunks = 0
-
-
+        
+        
     def add(self, seq: Sequence) -> None:
         """
         :param seq: Sequence to add to the waiting queue.
