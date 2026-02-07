@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Iterator, Optional
 import torch
 
@@ -8,6 +9,17 @@ from strata.engine.model_runner import ModelRunner
 from strata.cache.state_manager import StateManager
 from strata.models.registry import build_model
 from strata.utils.tokenizer import Tokenizer
+
+
+@dataclass
+class StepOutput:
+    """
+    Output from a single engine step. Contains finished sequences and metadata
+    for benchmarking and metric collection.
+    """
+    outputs: list[dict]
+    num_tokens: int
+    is_prefill: bool
 
 
 class LLMEngine:
@@ -99,14 +111,18 @@ class LLMEngine:
         return seq.seq_id
 
 
-    def step(self) -> tuple[list[dict], int]:
+    def step(self) -> StepOutput:
         """Execute one scheduling and inference step.
 
-        :returns: Tuple of (finished outputs, token count processed)
+        :returns: StepOutput with finished outputs and step metadata
         """
         schedule_output = self.scheduler.schedule()
         if schedule_output is None:
-            return [], 0
+            return StepOutput(
+                outputs=[],
+                num_tokens=0,
+                is_prefill=False,
+            )
 
         sequences = schedule_output.sequences
         if schedule_output.is_prefill:
@@ -114,11 +130,11 @@ class LLMEngine:
         else:
             token_ids = self.model_runner.run_decode(sequences)
 
-        finished_seqs = self.scheduler.postprocess(
+        postprocess_result = self.scheduler.postprocess(
             sequences, token_ids, schedule_output.is_prefill
         )
         outputs = []
-        for seq in finished_seqs:
+        for seq in postprocess_result.finished:
             text = self.tokenizer.decode(seq.generated_tokens)
             outputs.append({
                 "seq_id": seq.seq_id,
@@ -126,7 +142,12 @@ class LLMEngine:
                 "token_ids": seq.generated_tokens,
                 "prompt_tokens": seq.prompt_tokens,
             })
-        return outputs, schedule_output.num_tokens
+
+        return StepOutput(
+            outputs=outputs,
+            num_tokens=schedule_output.num_tokens,
+            is_prefill=schedule_output.is_prefill,
+        )
 
 
     def is_finished(self) -> bool:
@@ -159,8 +180,8 @@ class LLMEngine:
             seq_ids.append(seq_id)
         outputs_dict = {}
         while not self.is_finished():
-            outputs, _ = self.step()
-            for output in outputs:
+            step_output = self.step()
+            for output in step_output.outputs:
                 outputs_dict[output["seq_id"]] = output
 
         results = [outputs_dict[seq_id] for seq_id in seq_ids]
@@ -183,8 +204,8 @@ class LLMEngine:
         last_length = 0
 
         while not self.is_finished():
-            outputs, _ = self.step()
-            for output in outputs:
+            step_output = self.step()
+            for output in step_output.outputs:
                 tokens = output["token_ids"]
                 new_tokens = tokens[last_length:]
                 last_length = len(tokens)

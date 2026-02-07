@@ -11,7 +11,7 @@ class StrataConfig:
     """Configuration for Strata inference engine."""
 
     model_path: str
-    max_num_seqs: int = 256
+    max_num_seqs: int = 32
     max_context_length: int = 16384
     block_size: int = 16
     memory_utilization: float = 0.9

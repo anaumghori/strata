@@ -18,6 +18,14 @@ class SchedulerOutput:
     num_tokens: int
 
 
+@dataclass
+class PostprocessResult:
+    """
+    Result from postprocessing a scheduler step. Contains finished sequences.
+    """
+    finished: list[Sequence]
+
+
 class Scheduler:
     """
     Continuous batching scheduler with prefill-decode separation. Manages waiting and running queues, 
@@ -189,13 +197,13 @@ class Scheduler:
         scheduled_seqs: list[Sequence],
         token_ids: list[int],
         is_prefill: bool,
-    ) -> list[Sequence]:
+    ) -> PostprocessResult:
         """Process generated tokens and update sequence states.
 
         :param scheduled_seqs: Sequences that were executed
         :param token_ids: Generated token IDs (one per sequence)
         :param is_prefill: Whether this was a prefill step
-        :returns: List of finished sequences
+        :returns: PostprocessResult with finished sequences
         """
         finished = []
 
@@ -231,7 +239,7 @@ class Scheduler:
                     self.running.remove(seq)
                     finished.append(seq)
 
-        return finished
+        return PostprocessResult(finished=finished)
 
 
     def _check_finish_condition(self, seq: Sequence, token_id: int) -> bool:
